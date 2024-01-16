@@ -1,14 +1,10 @@
 #!/usr/bin/env python3
 
-import os
-import json
-import uuid
-import requests
-import shelve
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from client import BaseClient
 from .helpers import pick
+from .typing import SyncAsync
 
 
 class Endpoint:
@@ -17,168 +13,78 @@ class Endpoint:
         self.parent = parent
 
 
-class AuthEndpoint(Endpoint):
+class TasksEndpoint(Endpoint):
 
-    token_path = '/tmp/.feishu_token'
+    def list(self, project_id: str) -> SyncAsync[Any]:
+        '''
+        反馈某个Project的所有任务
 
-    def save_token_to_file(self):
-        with shelve.open(self.token_path) as db:
-            db['token'] = self.refresh_access_token()
-            return True
+        Args:
+            project_id (str): _description_
+
+        Returns:
+            SyncAsync[Any]: 返回一个任务列表
+        '''
+        return self.parent.request(
+            path=f'project/{project_id}/tasks',
+            method='GET',
+        )
     
-    def fetch_token_from_file(self):
-        with shelve.open(self.token_path) as db:
-            token = db.get('token')
-            return token
-
-    def get_tenant_access_token(self):
+    def create(self, 
+               project_id, 
+               title :str, 
+               content :str=None, 
+               tags :list=None, 
+               priority :int=1, 
+               start_date: str=None, 
+               end_date: str=None,
+               status: int=0):
         '''
         _summary_
+
+        Args:
+            project_id (_type_): _description_
+            title (str): _description_
+            content (str, optional): _description_. Defaults to None.
+            tags (list, optional): _description_. Defaults to None.
+            priority (int, optional): _description_. Defaults to 1.
+            start_date (str, optional): _description_. Defaults to None.
+            status: 0 进行中, 2已完成
 
         Returns:
             _type_: _description_
         '''
-        if os.environ.get('TENANT_ACCESS_TOKEN'):
-            return os.environ.get('TENANT_ACCESS_TOKEN')
-        else:
-            print('未找到token， 开始刷新')
-            resp = self.refresh_access_token()
-            if resp.tenant_access_token:
-                os.environ['TENANT_ACCESS_TOKEN'] = resp.tenant_access_token
-                return os.environ.get('TENANT_ACCESS_TOKEN')
+        api = '/batch/task'
 
-    def refresh_access_token(self):
-        payload = dict(
-            app_id=self.parent.app_id,
-            app_secret=self.parent.app_secret
+        json = {
+                "add":[
+                    {
+                        "items":[],
+                        "reminders":[],
+                        "exDate":[],
+                        "priority": priority,
+                        "assignee": "null",
+                        "progress":0,
+                        "startDate": start_date,
+                        "status": status,
+                        "projectId": project_id,
+                        "title": title,
+                        "tags": tags,
+                        "content": content,
+                        "completedTime": end_date
+                    }
+                ],
+                "update":[],
+                "delete": [],
+                "addAttachments":[],
+                "updateAttachments":[],
+                "deleteAttachments":[]
+            }
+
+        return self.parent.request(
+            path=f'batch/task',
+            method='POST',
+            json=json
         )
-
-        token = requests.request(method='POST', 
-                                    url=self.parent.options.base_url+'/auth/v3/tenant_access_token/internal', 
-                                    json=payload, timeout=5).json()['tenant_access_token']
-        
-        os.environ['TENANT_ACCESS_TOKEN'] = token
-        return token
-
-class MessageEndpoint(Endpoint):
-
-    def send_text(self,
-                  text: str,
-                  receive_id: str):
-        
-
-        format_message_content = json.dumps({ "text": text }, ensure_ascii=False)
-
-        payload = {
-                "content": format_message_content,
-                "msg_type": "text",
-                "receive_id": receive_id,
-                "uuid": str(uuid.uuid4())
-        }
-        receive_id_type = self.parent.extensions.parse_receive_id_type(receive_id=receive_id)
-
-        return self.parent.request(path=f'/im/v1/messages?receive_id_type={receive_id_type}', 
-                                   method='POST',
-                                   body=payload)
-    
-    def send_post(self,
-                  receive_id: str=None,
-                  message_id: str=None,
-                  title: str=None,
-                  content: list=None):
-        '''
-        发送富文本消息
-
-        Args:
-            reveive_id (str): 必选参数, 接收消息的 id, 可以是 chat_id, 也可以是 openid, 代码会自动判断
-            message_id (str): 如果设置此参数, 表示会在原消息上回复消息
-            title: (str): 消息的标题
-            content: (list): 消息的内容, 示例格式如下
-                content = [
-                    [
-                        {"tag": "text", "text": "VPN: XXX:8443"}
-                    ]
-                ]
-
-        Returns:
-            response (dict): 返回发送消息后的响应, 是一个大的 json, 还在考虑是否拆分一下
-        '''
-        
-        message_content = {
-            "zh_cn": {
-                "title": title,
-                "content": content
-                }
-            }
-
-        format_message_content = json.dumps(message_content, ensure_ascii=False)
-        
-        if receive_id:
-            receive_id_type = self.parent.extensions.parse_receive_id_type(receive_id=receive_id)
-            api = f'/im/v1/messages?receive_id_type={receive_id_type}'
-            payload = {
-                "content": format_message_content,
-                "msg_type": "post",
-                "receive_id": receive_id,
-                "uuid": str(uuid.uuid4())
-            }
-            
-        elif message_id:
-            api = f'/im/v1/messages/{message_id}/reply'
-            payload = {
-                "content": format_message_content,
-                "msg_type": "post",
-                "uuid": str(uuid.uuid4())
-            }
-
-        return self.parent.request(path=f'/im/v1/messages?receive_id_type={receive_id_type}', 
-                                method='POST',
-                                body=payload)
-
-    def send_card(self, template_id: str, template_variable: dict=None, receive_id: str=None):
-        '''
-        目前主要使用的发送卡片消息的函数, 从名字可以看出, 这是第2代的发送消息卡片函数
-
-        Args:
-            template_id (str): 消息卡片的 id, 可以在飞书的消息卡片搭建工具中获得该 id
-            template_variable (dict): 消息卡片中的变量
-            receive_id: (str): 接收消息的 id, 可以填写 open_id、chat_id, 函数会自动检测
-
-        Returns:
-            response (dict): 返回发送消息后的响应, 是一个大的 json, 还在考虑是否拆分一下
-        '''
-        receive_id_type = self.parent.extensions.parse_receive_id_type(receive_id=receive_id)
-        content = {
-            "type":"template",
-            "data":{
-                "template_id": template_id,
-                "template_variable": template_variable
-            }
-        }
-
-        content = json.dumps(content, ensure_ascii=False)
-        
-        payload = {
-           	"content": content,
-            "msg_type": "interactive",
-            "receive_id": receive_id
-        }
-        
-        return self.parent.request(path=f'/im/v1/messages?receive_id_type={receive_id_type}', 
-                                   method='POST',
-                                   body=payload)
-
-
-class ExtensionsEndpoint(Endpoint):
-    def parse_receive_id_type(self, receive_id):
-        if receive_id.startswith('ou'):
-            receive_id_type = 'open_id'
-        elif receive_id.startswith('oc'):
-            receive_id_type = 'chat_id'
-        else:
-            raise 'No such named receive_id'
-
-        return receive_id_type
-
 
 

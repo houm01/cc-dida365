@@ -4,9 +4,7 @@ import os
 from typing import Optional, Union, Any, Dict, Type, List
 from dataclasses import dataclass
 from .endpoints import (
-    AuthEndpoint,
-    MessageEndpoint,
-    ExtensionsEndpoint
+    TasksEndpoint
 )
 
 from .errors import (
@@ -26,41 +24,38 @@ from .typing import SyncAsync
 class ClientOptions:
     auth: Optional[str] = None
     timeout_ms: int = 60_000
-    base_url: str = "https://open.feishu.cn/open-apis"
+    base_url: str = "https://api.dida365.com/api/v2"
+    user_agent: str = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
 
 
 @dataclass
-class DidaResponse:
-    code: int
-    data: dict
-    chat_id: str
-    message_id: str
-    msg_type: str
-    sender: dict
-    msg: dict
-    expire: int
-    tenant_access_token: str
+class Task:
+    task_id: str
+    project_id: str
+    title: str
+    content: str
+    desc: str
+    start_date: str
+    due_date: str
+    priority: int
+    status: int
 
 
 class BaseClient:
 
     def __init__(self,
-                 app_id: str,
-                 app_secret: str,
+                 cookie: str,
                  client: Union[httpx.Client, httpx.AsyncClient],
             ) -> None:
         
-        self.app_id = app_id
-        self.app_secret = app_secret
+        self.cookie = cookie
 
         self.options = ClientOptions()
 
         self._clients: List[Union[httpx.Client, httpx.AsyncClient]] = []
         self.client = client
 
-        self.auth = AuthEndpoint(self)
-        self.message = MessageEndpoint(self)
-        self.extensions = ExtensionsEndpoint(self)
+        self.task = TasksEndpoint(self)
     
     @property
     def client(self) -> Union[httpx.Client, httpx.AsyncClient]:
@@ -72,7 +67,9 @@ class BaseClient:
         client.timeout = httpx.Timeout(timeout=self.options.timeout_ms / 1_000)
         client.headers = httpx.Headers(
             {
-                "User-Agent": "cc_feishu",
+                "User-Agent": self.options.user_agent,
+                'Content-Type': 'application/json;charset=UTF-8',
+                'Cookie': self.cookie
             }
         )
         self._clients.append(client)
@@ -94,15 +91,28 @@ class BaseClient:
 
     def _parse_response(self, response) -> Any:
         response = response.json()
-        return FeishuResponse(code=response.get('code'),
-                              data=response.get('data'),
-                              chat_id=response.get('chat_id'),
-                              message_id=response.get('message_id'),
-                              msg_type=response.get('msg_type'),
-                              sender=response.get('sender'),
-                              msg=response.get('msg'),
-                              expire=response.get('expire'),
-                              tenant_access_token=response.get('tenant_access_token'))
+        # print(response)
+        if isinstance(response, list):
+            for i in response:
+                yield Task(task_id=i.get('id'),
+                           project_id=i.get('projectId'),
+                           title=i.get('title'),
+                           content=i.get('content'),
+                           desc=i.get('desc'),
+                           start_date=i.get('startDate'),
+                           due_date=i.get('dueDate'),
+                           priority=i.get('prioroty'),
+                           status=i.get('status'))
+        # return response
+        # return DidaResponse(code=response.get('code'),
+        #                       data=response.get('data'),
+        #                       chat_id=response.get('chat_id'),
+        #                       message_id=response.get('message_id'),
+        #                       msg_type=response.get('msg_type'),
+        #                       sender=response.get('sender'),
+        #                       msg=response.get('msg'),
+        #                       expire=response.get('expire'),
+        #                       tenant_access_token=response.get('tenant_access_token'))
 
     @abstractclassmethod
     def request(self,
@@ -120,13 +130,12 @@ class Client(BaseClient):
     client: httpx.Client
 
     def __init__(self,
-                 app_id: str,
-                 app_secret: str,
+                 cookie: str,
                  client: Optional[httpx.Client]=None) -> None:
         
         if client is None:
             client = httpx.Client()
-        super().__init__(app_id, app_secret, client)
+        super().__init__(cookie, client)
     
     def __enter__(self) -> "Client":
         self.client = httpx.Client()
@@ -143,12 +152,6 @@ class Client(BaseClient):
     def close(self) -> None:
         self.client.close()
 
-    def _get_token(self):
-        if self.auth.fetch_token_from_file():
-            return self.auth.fetch_token_from_file()
-        else:
-            self.auth.save_token_to_file()
-            return self.auth.fetch_token_from_file()
 
     def request(self,
                 path: str,
@@ -158,17 +161,10 @@ class Client(BaseClient):
                 token: Optional[str] = None,
                 ) -> Any:
 
-        request = self._build_request(method, path, query, body, token=self._get_token())
+        request = self._build_request(method, path, query, body)
         
         try:
-            response = self._parse_response(self.client.send(request))
-
-            if 'Invalid access token for authorization' in response.msg:
-                self.auth.save_token_to_file()
-                request = self._build_request(method, path, query, body, token=self._get_token())
-                return self._parse_response(self.client.send(request))
-            else:
-                return response
+            return self._parse_response(self.client.send(request))
         except httpx.TimeoutException:
             raise RequestTimeoutError()
 
