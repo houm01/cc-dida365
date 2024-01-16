@@ -1,19 +1,19 @@
 ## 概览
 
-飞书的 Python SDK
+滴答清单的 Python SDK
 
 ## 如何安装
 
 ```sh
-pip3 install cc-feishu
+pip3 install cc-dida365
 ```
 
 ## 如何使用
 
 ### 引入模块
 ```python
-from cc_feishu.client import Client
-feishu = Client(app_id='填写你的机器人的 app_id', app_secret='填写你的机器人的 app_secret')
+from cc_dida365.client import Client
+dida = Client(cookie='')
 ```
 
 ## Test
