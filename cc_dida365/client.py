@@ -28,18 +28,6 @@ class ClientOptions:
     user_agent: str = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36'
 
 
-@dataclass
-class Task:
-    task_id: str
-    project_id: str
-    title: str
-    content: str
-    desc: str
-    start_date: str
-    due_date: str
-    priority: int
-    status: int
-
 
 class BaseClient:
 
@@ -90,30 +78,8 @@ class BaseClient:
         )
 
     def _parse_response(self, response) -> Any:
-        response = response.json()
-        # print(response)
-        if isinstance(response, list):
-            for i in response:
-                yield Task(task_id=i.get('id'),
-                           project_id=i.get('projectId'),
-                           title=i.get('title'),
-                           content=i.get('content'),
-                           desc=i.get('desc'),
-                           start_date=i.get('startDate'),
-                           due_date=i.get('dueDate'),
-                           priority=i.get('prioroty'),
-                           status=i.get('status'))
-        # return response
-        # return DidaResponse(code=response.get('code'),
-        #                       data=response.get('data'),
-        #                       chat_id=response.get('chat_id'),
-        #                       message_id=response.get('message_id'),
-        #                       msg_type=response.get('msg_type'),
-        #                       sender=response.get('sender'),
-        #                       msg=response.get('msg'),
-        #                       expire=response.get('expire'),
-        #                       tenant_access_token=response.get('tenant_access_token'))
-
+        return response.json()
+    
     @abstractclassmethod
     def request(self,
                 path: str,
