@@ -24,6 +24,28 @@ class Task:
     due_date: str
     priority: int
     status: int
+    tags: list
+    completed_time: str
+    assignee: int
+
+class ExtensionsEndpoint(Endpoint):
+    def process_status(self, status):
+        if status == 0:
+            return '进行中'
+        elif status == 2:
+            return '已完成'
+        else:
+            return '未识别'
+
+    def process_priority(self, priority):
+        if priority == 1:
+            return '低优先级'
+        elif priority == 3:
+            return '中优先级'
+        elif priority == 5:
+            return '高优先级'
+        else:
+            return '未识别'
 
 
 class TasksEndpoint(Endpoint):
@@ -42,6 +64,7 @@ class TasksEndpoint(Endpoint):
             path=f'project/{project_id}/tasks',
             method='GET',
         )
+
         for i in tasks:
             yield Task(task_id=i.get('id'),
                         project_id=i.get('projectId'),
@@ -50,8 +73,11 @@ class TasksEndpoint(Endpoint):
                         desc=i.get('desc'),
                         start_date=i.get('startDate'),
                         due_date=i.get('dueDate'),
-                        priority=i.get('prioroty'),
-                        status=i.get('status'))
+                        priority=self.parent.extensions.process_priority(i.get('priority')),
+                        status=self.parent.extensions.process_status(status=i.get('status')),
+                        tags=i.get('tags'),
+                        completed_time=i.get('completedTime'),
+                        assignee=i.get('assignee'))
     
     def create(self, 
                project_id, 
@@ -121,11 +147,12 @@ class TasksEndpoint(Endpoint):
 
         if tags:
             try:
-                task['tags'] + tags
+                task['tags'] += tags
             except KeyError:
                 task['tags'] = tags
- 
-        task['content'] = task['content'] + content
+
+        if content:
+            task['content'] = task['content'] + content
 
         json = {
                 "add":[],

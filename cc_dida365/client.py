@@ -4,7 +4,8 @@ import os
 from typing import Optional, Union, Any, Dict, Type, List
 from dataclasses import dataclass
 from .endpoints import (
-    TasksEndpoint
+    TasksEndpoint,
+    ExtensionsEndpoint
 )
 
 from .errors import (
@@ -44,6 +45,7 @@ class BaseClient:
         self.client = client
 
         self.task = TasksEndpoint(self)
+        self.extensions = ExtensionsEndpoint(self)
     
     @property
     def client(self) -> Union[httpx.Client, httpx.AsyncClient]:
