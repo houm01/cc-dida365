@@ -87,7 +87,8 @@ class TasksEndpoint(Endpoint):
                priority :int=1, 
                start_date: str=None, 
                end_date: str=None,
-               status: int=0):
+               status: int=0,
+               assignee: int='null'):
         '''
         _summary_
 
@@ -112,7 +113,7 @@ class TasksEndpoint(Endpoint):
                         "reminders":[],
                         "exDate":[],
                         "priority": priority,
-                        "assignee": "null",
+                        "assignee": assignee,
                         "progress":0,
                         "startDate": start_date,
                         "status": status,
@@ -133,7 +134,7 @@ class TasksEndpoint(Endpoint):
         return self.parent.request(
             path=f'batch/task',
             method='POST',
-            json=json
+            body=json
         )
 
     def get(self, task_id, project_id):
@@ -142,7 +143,7 @@ class TasksEndpoint(Endpoint):
             method='GET',
         )
 
-    def update(self, task_id, project_id, tags: list=None, content: str=None):
+    def update(self, task_id, project_id, tags: list=None, content: str=None, content_front=False):
         task = self.get(task_id=task_id, project_id=project_id)
 
         if tags:
@@ -151,7 +152,9 @@ class TasksEndpoint(Endpoint):
             except KeyError:
                 task['tags'] = tags
 
-        if content:
+        if content and content_front:
+            task['content'] = content + task['content']
+        elif content and not content_front:
             task['content'] = task['content'] + content
 
         json = {
