@@ -48,6 +48,16 @@ class ExtensionsEndpoint(Endpoint):
             return '未识别'
 
 
+class ProjectEndpoint(Endpoint):
+
+    def list(self):
+        return self.parent.request(
+            path=f'project',
+            method='GET',
+            # body=json
+        )
+
+
 class TasksEndpoint(Endpoint):
 
     def list(self, project_id: str) -> SyncAsync[Any]:
@@ -104,13 +114,13 @@ class TasksEndpoint(Endpoint):
         Returns:
             _type_: _description_
         '''
-        api = '/batch/task'
-
         json = {
                 "add":[
                     {
                         "items":[],
-                        "reminders":[],
+                        "reminders":[
+                            {"trigger": "TRIGGER:PT0S"}
+                        ],
                         "exDate":[],
                         "priority": priority,
                         "assignee": assignee,
@@ -143,8 +153,16 @@ class TasksEndpoint(Endpoint):
             method='GET',
         )
 
-    def update(self, task_id, project_id, tags: list=None, content: str=None, content_front=False):
+    def update(self, 
+               task_id, 
+               project_id, 
+               tags: list=None, 
+               content: str=None, 
+               content_front=False,
+               done: bool=False):
+
         task = self.get(task_id=task_id, project_id=project_id)
+        # print(task)
 
         if tags:
             try:
@@ -157,6 +175,13 @@ class TasksEndpoint(Endpoint):
         elif content and not content_front:
             task['content'] = task['content'] + content
 
+        # task['completedTime'] = '2024-02-17T09:53:51.000+0000'
+        if done:
+            task['status'] = 2
+            # task['completedTime'] = '2024-02-20T04:30:00.000+0000'
+
+        # print(task)
+
         json = {
                 "add":[],
                 "update":[task],
@@ -165,9 +190,17 @@ class TasksEndpoint(Endpoint):
                 "updateAttachments":[],
                 "deleteAttachments":[]
                 }
+        
         return self.parent.request(
             path='batch/task',
             method='POST',
             body=json
         )
 
+    def complete(self, project_id, task_id):
+        
+        return self.parent.request(
+            path=f'project/{project_id}/task/{task_id}/complete',
+            method='POST',
+            # body=json
+        )

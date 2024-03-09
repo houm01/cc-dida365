@@ -5,7 +5,8 @@ from typing import Optional, Union, Any, Dict, Type, List
 from dataclasses import dataclass
 from .endpoints import (
     TasksEndpoint,
-    ExtensionsEndpoint
+    ExtensionsEndpoint,
+    ProjectEndpoint
 )
 
 from .errors import (
@@ -46,6 +47,7 @@ class BaseClient:
 
         self.task = TasksEndpoint(self)
         self.extensions = ExtensionsEndpoint(self)
+        self.project = ProjectEndpoint(self)
     
     @property
     def client(self) -> Union[httpx.Client, httpx.AsyncClient]:
@@ -80,6 +82,7 @@ class BaseClient:
         )
 
     def _parse_response(self, response) -> Any:
+        # print(response.text)
         return response.json()
     
     @abstractclassmethod
